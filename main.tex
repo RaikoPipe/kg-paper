@@ -17,7 +17,13 @@
 \affiliation{\institution{Institution}\country{Country}}
 
 \begin{abstract}
-Graph-based retrieval-augmented generation (GraphRAG) relies on knowledge graphs that large language models (LLMs) extract from text. Construction errors such as missed facts, fragmented or conflated entities and false triples are known to occur, but their causal effect on answer quality has not been measured. We report a pre-registered, controlled error-injection study. We anchor the 1,515 gold evidence triples of 600 2WikiMultihopQA questions in a realistic LLM-extracted background graph (33,217 edges). We then inject six typed construction errors at graded rates and trace their propagation through two retrievers, two context formats and five generators from three model families (123,487 generated answers; LLM judge validated at $\kappa=0.94$). Five of the six error types reduce accuracy monotonically. Entity and edge omissions are the most damaging, reducing accuracy from 0.89 to 0.26 and 0.40 at a 30\% error rate, whereas spurious edges are harmless under relation-aware retrieval but cost up to 11 points under PageRank-based retrieval. Across the tested ranges, graph errors explain 83--97\% of the variance in condition-level accuracy; retriever choice explains 8\%, and the choice of generator (from Claude Haiku~4.5 to gpt-oss-20b) explains less than 1\%. Even at a 10\% error rate, the mean accuracy loss from graph errors equals the gap between the two retrievers and is nine times the spread between generators. A mediation decomposition shows that omission errors act almost entirely through retrieval (89--95\% of the loss). Corruption and merge errors act through both stages, with about 40\% of their loss arising in generation, and they are the only errors that make models adopt injected false values. Attaching source sentences to triples recovers up to 17 accuracy points under omission errors and reduces false-value adoption (odds ratio 0.41), but it is weaker against corrupted triples. Measured on three LLM extractors, natural error profiles lie in the omission-dominated regime (21--31\% of gold facts missing). The injected dose--response curves give a conservative lower bound on end-to-end accuracy over naturally extracted graphs. For multi-hop factoid question answering, the results show that the bottleneck of GraphRAG lies in graph construction, not in the generator, and point to evaluation and engineering practices that follow from this.
+Graph-based retrieval-augmented generation (GraphRAG) answers questions from knowledge graphs that large language models (LLMs) extract from text. These graphs contain errors: missed facts, fragmented or conflated entities and false triples. So far, the effect of such errors on answers has only been observed, never controlled.
+
+We embed the gold evidence of 600 multi-hop questions from 2WikiMultihopQA in a realistic LLM-extracted graph and inject six typed construction errors, each at rates from 10\% to 50\%. We then trace every error through two retrievers, two context formats and five generators (123,487 answers).
+
+Graph errors dominate. They explain 83--97\% of the variance in accuracy, compared with 8\% for the retriever and less than 1\% for the generator. Missing entities and edges are the most damaging: at a 30\% rate, accuracy falls from 0.89 to 0.26 and 0.40. These omissions act through retrieval and turn answers into abstentions. Corrupted relations and merged entities act partly through generation and are the only errors that make models repeat false facts. Attaching source sentences to triples recovers up to 17 accuracy points and cuts the odds of adopting false facts by about 60\%, whereas stronger generators do not help. Real LLM extractors miss 21--31\% of gold facts, which places them in the most damaging regime.
+
+For multi-hop factoid question answering, the bottleneck of GraphRAG is graph construction, not the generator.
 \end{abstract}
 
 \begin{CCSXML}
@@ -33,16 +39,15 @@ Graph-based retrieval-augmented generation (GraphRAG) relies on knowledge graphs
 \section{Introduction}
 Retrieval-augmented generation (RAG) grounds large language models (LLMs) in external evidence~\cite{lewis2020rag}. GraphRAG extends this idea by first turning a corpus into a knowledge graph and then retrieving entities, relations, paths or communities from it~\cite{edge2024local,peng2025survey,han2024graphrag}. The promise is better multi-hop reasoning and corpus-level sense-making~\cite{edge2024local,gutierrez2024hipporag,guo2025lightrag}. Controlled comparisons published since 2025, however, give a more cautious picture. GraphRAG and vector RAG behave in complementary ways and neither wins consistently~\cite{han2026ragvs,xiang2025when,zhou2025indepth}. Structure-augmented methods can fall below strong embedding retrieval on simple factual questions~\cite{gutierrez2025rag2memory}, and many reported gains shrink once the evaluation is debiased~\cite{zeng2025significant}.
 
-One explanation for these mixed results recurs across the literature: the graph itself. Han et~al.\ report that only about two thirds of answer entities appear in LLM-constructed graphs for HotpotQA and Natural Questions~\cite{han2026ragvs}. Converting text to triples discards context~\cite{huang2025tcrqf}. Entity-resolution errors inflate and distort extracted graphs~\cite{cai2025extraction}. A few manipulated words at the extraction stage can poison downstream answers~\cite{wen2025fewwords,liang2025underfire}. Despite this, the evidence on construction errors is observational. The quality of the constructed graph is measured, or a mitigation is proposed and validated by end-task accuracy, but the errors are never \emph{manipulated} independently of everything else in the pipeline. As a result, three questions that determine engineering priorities remain open:
+One explanation for these mixed results recurs across the literature: the graph itself. Han et~al.\ report that only about two thirds of answer entities appear in LLM-constructed graphs for HotpotQA and Natural Questions~\cite{han2026ragvs}. Converting text to triples discards context~\cite{huang2025tcrqf}. Entity-resolution errors inflate and distort extracted graphs~\cite{cai2025extraction}. A few manipulated words at the extraction stage can poison downstream answers~\cite{wen2025fewwords,liang2025underfire}. Despite this, most evidence on construction errors is observational: the quality of the constructed graph is measured, or a mitigation is proposed and validated by end-task accuracy. Where errors have been manipulated directly, the manipulation is either adversarial, as in poisoning attacks~\cite{wen2025fewwords,liang2025underfire}, or limited to removing triples from curated KGs~\cite{zhou2025incomplete,wang2026missdiag}. No study has varied the error types characteristic of LLM extraction, such as split or conflated entities and plausible false triples, at controlled rates and traced them through the pipeline. As a result, three questions that determine engineering priorities remain open:
 (i)~which construction errors matter, and how much; (ii)~whether their damage arises in retrieval or in generation; and (iii)~whether better retrievers, richer context or stronger generators can absorb them.
-Recent work on incomplete curated KGs takes a similar diagnostic stance~\cite{zhou2025incomplete,wang2026missdiag}, but it removes edges from curated KGs and does not model the error types characteristic of LLM extraction, such as split or conflated entities and plausible false triples.
 
-This paper closes that gap with a controlled error-injection study. We construct a \emph{gold-anchored graph} for 600 questions from 2WikiMultihopQA~\cite{ho2020twowiki}. The gold evidence triples of each question are embedded, exactly once and with sentence-level provenance, in a background graph that an LLM extracted from all 3,980 context paragraphs. This gives full control over every fact a question depends on, while keeping the hubs, distractors and noise of a real extracted graph. We then apply six seeded error operators that mirror the failure modes reported in the literature: entity deletion, edge deletion, entity split, entity merge, relation corruption and spurious edges. Each operator is applied at five rates, and its effect is traced through two retrievers, two context formats and five generators.
+This paper closes that gap with a controlled error-injection study. We construct a \emph{gold-anchored graph} for 600 questions from 2WikiMultihopQA~\cite{ho2020twowiki}. The gold evidence triples of each question are embedded, exactly once and with sentence-level provenance, in a background graph that an LLM extracted from all 3,980 context paragraphs. This gives full control over every fact a question depends on, while keeping three properties of a real extracted graph: hub entities with very many connections, distractor facts about similar but irrelevant entities, and the extractor's own errors (Section~\ref{sec:anchor}). We then apply six seeded error operators that mirror the failure modes reported in the literature: entity deletion, edge deletion, entity split, entity merge, relation corruption and spurious edges. Each operator is applied at four rates between 10\% and 50\% of the graph's nodes or edges, and its effect is compared with the clean graph and traced through two retrievers, two context formats and five generators.
 
-We pre-registered seven hypotheses about the shape of the dose--response curves, stage dominance, the mechanism of damage, mitigation by provenance and by generator strength, and external validity on naturally extracted graphs. The study makes four contributions.
+We fixed three research questions, their hypotheses and the analysis plan in a written protocol before running the main experiments; the protocol and its deviations log are released with the code. The study makes four contributions.
 
 \begin{itemize}
-\item \textbf{A controlled testbed.} We introduce a gold-anchored error-injection methodology for GraphRAG with typed operators, mediation-ready logging and a validated single-answer judge. Code and data are released.
+\item \textbf{A controlled testbed.} We introduce a gold-anchored error-injection methodology for GraphRAG with typed operators, mediation-ready logging and a validated single-answer judge. Code and data are available at \url{https://github.com/ANONYMIZED/graphrag-error-injection}.
 \item \textbf{Dose--response evidence.} We report curves for six construction error types. Omissions dominate: at a 30\% rate, entity deletion reduces accuracy from 0.89 to 0.26 and edge deletion to 0.40. Spurious edges are harmless under relation-aware retrieval.
 \item \textbf{Stage attribution.} Graph errors explain 83--97\% of the variance in accuracy, against 8\% for the retriever and under 1\% for the generator. The loss from omission errors is mediated almost entirely by retrieval, whereas commission errors are the only ones that lead models to adopt false values.
 \item \textbf{Calibration against real extractors.} The natural error profiles of three LLM extractors fall in the omission-dominated regime, and the injected curves give a conservative bound on accuracy over naturally extracted graphs.
@@ -61,27 +66,18 @@ Systematic comparisons find that GraphRAG helps on multi-hop and aggregation que
 Errors in LLM-based KG construction include missed facts, lost context~\cite{huang2025tcrqf}, entity fragmentation and conflation~\cite{cai2025extraction,christophides2021er} and noisy triples, which degrade downstream hallucination detection~\cite{kumar2026hallubench}. Graph-refinement research has long catalogued such errors for curated KGs~\cite{paulheim2017refinement}, and KG-embedding studies show sensitivity to sparsity and noise~\cite{pujara2017sparsity}. For KG-RAG, robustness to missing knowledge has been evaluated by random or typed removal of triples~\cite{zhou2025incomplete,wang2026missdiag}. GraphRAG-specific mitigations filter noisy retrievals and rebalance parametric knowledge~\cite{guo2025graphragfi}. Retrieval over-expansion is a further reported failure: graph retrieval raises recall but lowers relevance~\cite{wu2026memgraphrag}. In the security literature, adversarial attacks on the extraction step~\cite{liang2025underfire,wen2025fewwords} and data-extraction attacks~\cite{liu2025privacy} show that the graph is an attack surface in its own right. In plain RAG, noise robustness and the position of evidence in the context have been studied extensively~\cite{chen2024rgb,cuconasu2024power,liu2024lost,xie2023adaptive,zou2024poisonedrag}. Our study is the first, to our knowledge, to vary several typed \emph{construction} errors at controlled rates and to separate their retrieval-stage effects from their generation-stage effects.
 
 \section{Research Questions and Hypotheses}\label{sec:design}
-The design, hypotheses and analysis plan were frozen in a pre-registration document before any outcome data existed. Deviations are logged with dates in the released materials and summarized in Section~\ref{sec:threats}. We ask five research questions.
+We fixed the research questions, hypotheses and analysis plan in a written protocol before running the main experiments. A pilot on 60 questions was used only to set the scale of the study. Deviations from the protocol are logged in the released materials and summarized in Section~\ref{sec:threats}. Each research question has one directional hypothesis, ordered by the expected importance of the answer for GraphRAG practice.
 
 \begin{description}
-\item[RQ1 (dose--response)] How does answer quality change as each typed construction error increases in rate?
-\item[RQ2 (stage dominance)] How much of the variance in answer quality is due to graph quality, compared with retriever choice, provenance attachment and generator choice?
-\item[RQ3 (mechanism)] What share of each error's damage arises in retrieval, and what share in generation?
-\item[RQ4 (mitigation)] Do provenance text, stronger generators and question type moderate the damage?
-\item[RQ5 (external validity)] Do the injected curves predict accuracy over naturally extracted graphs?
+\item[RQ1 (impact)] Which construction errors harm answer quality, and how much compared with the choice of retriever, context format and generator?\\
+\textbf{H1.} Every error type reduces accuracy monotonically with its rate. Within realistic rates ($p\le0.3$), graph errors explain more variance in accuracy than any other factor.
+\item[RQ2 (mechanism)] Through which pipeline stage does each error act, and how does it show in the answers?\\
+\textbf{H2.} Omission errors (deletion, split) act mainly through retrieval and lead to abstentions. Commission errors (merge, corruption, spurious edges) act mainly through generation and lead to adoption of false values.
+\item[RQ3 (mitigation)] Can richer context or stronger generators absorb the damage?\\
+\textbf{H3.} Attaching source sentences reduces false-value adoption under commission errors but not the loss under omission errors. Stronger generators reduce generation-stage loss but not retrieval-stage loss.
 \end{description}
 
-The corresponding hypotheses are as follows.
-
-\begin{description}
-\item[H1] Accuracy decreases monotonically with error rate for every operator. Omission operators (deletion, split) reduce gold-evidence retrieval more steeply than commission operators (merge, corruption, spurious edges).
-\item[H2] For rates $p \le 0.3$, graph errors explain more variance than retriever, provenance or generator choice.
-\item[H3] More than 50\% of the loss from split errors is mediated by retrieval. More than 50\% of the loss from corruption and merge errors arises in generation.
-\item[H4] Commission errors lead to more adoption of false values and fewer abstentions than omission errors.
-\item[H5] Provenance reduces false-value adoption under commission errors but does not reduce omission damage.
-\item[H6] Stronger generators reduce generation-stage loss but not retrieval-stage loss.
-\item[H7] (Exploratory.) The injected curves predict accuracy on graphs built entirely by an LLM extractor, given the extractor's measured error profile.
-\end{description}
+In addition, an exploratory analysis (Section~\ref{sec:natural}) tests whether curves obtained by uniform injection predict accuracy over graphs built entirely by an LLM extractor.
 
 \section{Method}\label{sec:method}
 \begin{figure}[t]
@@ -106,12 +102,12 @@ The corresponding hypotheses are as follows.
 \label{fig:design}
 \end{figure}
 
-\subsection{Gold-anchored graph}
+\subsection{Gold-anchored graph}\label{sec:anchor}
 \paragraph{Data.} 2WikiMultihopQA~\cite{ho2020twowiki} provides, for each question, gold evidence triples (e.g., \emph{(Polish-Russian War; director; Xawery \.Zu\l{}awski)}), supporting sentences and ten context paragraphs, eight of which are distractors. Unlike HotpotQA~\cite{yang2018hotpotqa} or MuSiQue~\cite{trivedi2022musique}, it supplies explicit evidence triples. These triples act as a gold sub-graph whose integrity we can control. We drew 600 development questions, stratified evenly across the four question types: compositional, inference, comparison and bridge-comparison. The corpus is the union of their context paragraphs (3,980 unique paragraphs, 14,623 sentences), so distractors from all questions compete in retrieval.
 
 \paragraph{Background graph.} An LLM extractor (gpt-oss-120b) produced (sentence, subject, relation, object) quadruples from every paragraph. The prompt was schema-guided, with relation labels taken from the dataset vocabulary and other labels allowed, and the extraction yielded 33,468 triples. Entity mentions were normalized and resolved to gold entity names and paragraph titles, by exact normalized match or by fuzzy match (ratio $\ge 94$).
 
-\paragraph{Anchoring.} We removed the 1,393 background triples that duplicated a gold fact, i.e.\ triples with the same head--tail pair, or the same head and relation, as a gold triple. We then inserted the 1,515 unique gold triples, each with the supporting sentence that states it as provenance. In the resulting graph $G^\star$ (33,217 edges, 26,474 nodes), every fact a question depends on exists exactly once. Each injected error therefore has an unambiguous counterfactual, while the background graph contributes realistic hubs (e.g., \emph{United States}, degree 396), distractors and extraction noise.
+\paragraph{Anchoring.} We removed the 1,393 background triples that duplicated a gold fact, i.e.\ triples with the same head--tail pair, or the same head and relation, as a gold triple. We then inserted the 1,515 unique gold triples, each with the supporting sentence that states it as provenance. In the resulting graph $G^\star$ (33,217 edges, 26,474 nodes), every fact a question depends on exists exactly once. Each injected error therefore has an unambiguous counterfactual, while the background graph supplies three properties of real extracted graphs that make retrieval hard. We use the terms as follows. \emph{Hubs} are nodes of very high degree, in the sense of network science, that connect otherwise unrelated questions; the largest is \emph{United States} with 397 incident edges, followed by \emph{American} (272) and \emph{film director} (247). \emph{Distractors} are facts about entities that are similar to, but irrelevant for, a question; they come mainly from the eight distractor paragraphs that 2WikiMultihopQA attaches to each question, a term the dataset inherits from the distractor setting of HotpotQA~\cite{yang2018hotpotqa}. \emph{Noise} denotes the extractor's own errors: imprecise or unsupported triples, about 3\% of the background triples (Table~\ref{tab:natural}), and inconsistent surface forms of entities.
 
 \subsection{Typed error operators}
 Each operator $o$ is applied to $G^\star$ at rate $p \in \{0.1, 0.2, 0.3, 0.5\}$ with a fixed seed, sampling uniformly from all nodes or edges. Operators are applied one at a time; their interactions are left to future work. The six operators are:
@@ -145,31 +141,32 @@ We group \op{Ent\_Del}, \op{Edge\_Del} and \op{Split} as \emph{omission} errors,
 \end{itemize}
 
 \subsection{Analysis}
-\paragraph{H1 (dose--response).} Rate slopes are estimated with population-averaged logistic GEE models (exchangeable working correlation within questions):
+\paragraph{Dose--response (H1).} Rate slopes are estimated with population-averaged logistic GEE models (exchangeable working correlation within questions):
 \begin{equation}
 \operatorname{logit}\Pr(\text{correct}) = \beta_0 + \sum_{o\in\mathcal{O}} \beta_o\, p\,\mathbb{1}[\text{op}=o] + \gamma_{\text{ret}} + \gamma_{\text{prov}} + \gamma_{\text{type}},
 \end{equation}
 with Holm correction across the six slopes. Slopes of gold-evidence retrieval come from the deterministic retrieval grid (rates 0--0.5 in steps of 0.05--0.1, three seeds), with question-clustered standard errors.
 
-\paragraph{H2 (variance decomposition).} Condition-level accuracies are decomposed with Shapley values of $R^2$ over the factors graph condition (operator $\times$ rate), retriever, provenance and generator.
+\paragraph{Variance decomposition (H1).} Condition-level accuracies are decomposed with Shapley values of $R^2$ over the factors graph condition (operator $\times$ rate), retriever, provenance and generator.
 
-\paragraph{H3 and H6 (mediation).} For a condition $c$ and the clean graph $0$, let $s$ be the probability that the gold evidence is retrieved and $a_s$, $a_{\bar s}$ the accuracy with and without it. We decompose the accuracy drop into a retrieval term $(s_0 - s_c)(a_{s,0} - a_{\bar s,0})$ and a generation term (the remainder). Confidence intervals come from a question-level bootstrap with 1,000 resamples.
+\paragraph{Mediation (H2, H3).} For a condition $c$ and the clean graph $0$, let $s$ be the probability that the gold evidence is retrieved and $a_s$, $a_{\bar s}$ the accuracy with and without it. We decompose the accuracy drop into a retrieval term $(s_0 - s_c)(a_{s,0} - a_{\bar s,0})$ and a generation term (the remainder). Confidence intervals come from a question-level bootstrap with 1,000 resamples.
 
-\paragraph{H4 and H5 (outcomes and moderation).} H4 is tested with $\chi^2$ tests on the outcome distribution. H5 and H6 are tested with GEE interaction terms.
+\paragraph{Outcomes and moderation (H2, H3).} Differences in the outcome distribution (correct, abstained, adopted false value, other wrong) are tested with $\chi^2$ tests. The moderating effects of provenance and generator are tested with GEE interaction terms.
 
 \section{Experimental Setup}\label{sec:setup}
 \paragraph{Generators.} Claude Haiku~4.5 is the primary generator and runs the full grid: 25 graph conditions (clean graph plus 6 operators $\times$ 4 rates) $\times$ 2 retrievers $\times$ 2 context formats $\times$ 600 questions, i.e.\ 60,000 answers. Three open-weight models run the \khop grid (clean graph and rates 0.1 and 0.3, both context formats): gpt-oss-120b, gpt-oss-20b and Gemma~4~31B. Claude Sonnet~4.6 runs the clean graph and rate 0.3.
 
 \paragraph{Reference systems.} All generators also answer closed-book (no retrieval) and with dense passage RAG, which retrieves the top five paragraphs by TF-IDF from the full corpus.
 
-\paragraph{Natural graphs.} For RQ5, we built graphs entirely from extractor output (gpt-oss-120b and Claude Haiku~4.5), without gold anchoring, and answered all questions over them with Haiku and \khop retrieval.
+\paragraph{Natural graphs.} For the exploratory analysis, we built graphs entirely from extractor output (gpt-oss-120b and Claude Haiku~4.5), without gold anchoring, and answered all questions over them with Haiku and \khop retrieval.
 
 \paragraph{Scale and cost.} In total the study comprises 123,487 generated answers. All model calls are cached and reproducible from the released prompts.
 
 \section{Results}\label{sec:results}
 \paragraph{Baselines.} On the clean gold-anchored graph, \khop retrieves the complete gold evidence for 89.2\% of the questions and PPR for 75.8\%. The remaining failures stem mostly from naming inconsistencies in the dataset's own evidence. With Haiku, clean-graph accuracy is 0.892 (95\% CI 0.867--0.915) with \khop and 0.760 with PPR. This is far above dense passage RAG (0.327) and closed-book answering (0.208). Closed-book accuracy varies widely across generators, from 0.21 for Haiku and gpt-oss-20b to 0.58 for Sonnet~4.6. Under graph-grounded instructions, however, all five generators reach the same clean-graph accuracy (0.88--0.90; Table~\ref{tab:main}, Figure~\ref{fig:attr}b).
 
-\subsection{RQ1: Dose--response}
+\subsection{RQ1: Which errors matter}
+\paragraph{Dose--response.}
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/fig2_dose_response.pdf}
@@ -202,7 +199,7 @@ Five of the six operators reduce accuracy monotonically (Figure~\ref{fig:dose}, 
 
 The ranking follows how many gold elements each operator can break. A question depends on two to four gold edges and three to six gold nodes. Deleting a node removes all of its edges, so each gold node is a single point of failure. A split, by contrast, disconnects only the half of a node's edges that move to the alias. Spurious edges have no detectable effect with \khop (OR 1.01, $p=0.43$). Because \khop ranks edges by relation match, a random extra triple rarely displaces a gold triple. With PPR, which rewards graph centrality, the same operator lowers accuracy by up to 11 points at $p=0.5$, showing that the harm of hallucinated triples depends on the retriever.
 
-The second part of H1 is only partially supported. The two deletion operators lower gold-evidence retrieval most steeply (slopes $-1.52$ and $-1.44$), and split lowers it more than merge or spurious edges. However, relation corruption lowers retrieval as steeply as edge deletion ($-1.45$). The reason is that a corrupted first-hop edge redirects a two-hop traversal to the wrong intermediate entity, so the second gold edge is never reached. Corruption thus acts as an omission error on the downstream hop.
+The protocol also predicted that omission operators would lower gold-evidence retrieval more steeply than commission operators. This holds only in part. The two deletion operators lower gold-evidence retrieval most steeply (slopes $-1.52$ and $-1.44$), and split lowers it more than merge or spurious edges. However, relation corruption lowers retrieval as steeply as edge deletion ($-1.45$). The reason is that a corrupted first-hop edge redirects a two-hop traversal to the wrong intermediate entity, so the second gold edge is never reached. Corruption thus acts as an omission error on the downstream hop.
 
 \paragraph{Question type.} The damage depends on how many facts a question needs (Table~\ref{tab:qtype}). Bridge-comparison questions need four gold facts, and at $p=0.3$ their accuracy under entity deletion falls from 0.92 to 0.13. Comparison questions need two independent one-hop facts and keep 0.78--0.82 accuracy under merge and corruption, partly because their binary answers can be guessed.
 
@@ -221,19 +218,18 @@ Bridge-comparison (4) & 0.920 & 0.127 & 0.233 & 0.533 & 0.600 & 0.447 & 0.920 \\
 \end{tabular}
 \end{table}
 
-\subsection{RQ2: Stage dominance}
-\begin{figure}[t]
+\paragraph{Comparison with other design choices.}\begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/fig4_attribution.pdf}
 \caption{(a) Shapley decomposition of the explained variance in condition-level accuracy, for the Haiku grid ($p\le 0.3$; factors: graph condition, retriever, provenance) and for the five-generator grid (\khop; $p\in\{0,0.3\}$; factors: graph condition, generator, provenance). (b) Accuracy of the five generators on the clean graph and at $p=0.3$ for each operator (\khop, triples only, 600 questions each).}
 \label{fig:attr}
 \end{figure}
 
-H2 is strongly supported (Figure~\ref{fig:attr}a). Across the Haiku grid with $p \le 0.3$, the graph condition accounts for a Shapley share of 0.83 of condition-level $R^2$ (total $R^2=0.95$). The retriever accounts for 0.08 and provenance for 0.04. In the five-generator grid the graph condition accounts for 0.97, provenance for 0.02 and the generator for 0.003. Because the graph factor spans more levels than the other factors, we also compare effects at matched magnitudes. At the mildest error rate tested ($p=0.1$), the mean accuracy loss across the six operators (0.133) already equals the clean-graph gap between \khop and PPR (0.132) and is about nine times the largest clean-graph difference between generators (0.015). At $p=0.3$ the mean loss is 0.328. At the level of individual questions, the graph condition also explains more deviance (McFadden $R^2=0.067$) than question type (0.049), retriever (0.007) or provenance (0.003).
+The second part of H1 is strongly supported (Figure~\ref{fig:attr}a). Across the Haiku grid with $p \le 0.3$, the graph condition accounts for a Shapley share of 0.83 of condition-level $R^2$ (total $R^2=0.95$). The retriever accounts for 0.08 and provenance for 0.04. In the five-generator grid the graph condition accounts for 0.97, provenance for 0.02 and the generator for 0.003. Because the graph factor spans more levels than the other factors, we also compare effects at matched magnitudes. At the mildest error rate tested ($p=0.1$), the mean accuracy loss across the six operators (0.133) already equals the clean-graph gap between \khop and PPR (0.132) and is about nine times the largest clean-graph difference between generators (0.015). At $p=0.3$ the mean loss is 0.328. At the level of individual questions, the graph condition also explains more deviance (McFadden $R^2=0.067$) than question type (0.049), retriever (0.007) or provenance (0.003).
 
 The generators are close to interchangeable (Figure~\ref{fig:attr}b). Averaged over the three omission operators at $p=0.3$, accuracy ranges from 0.47 (gpt-oss-120b) to 0.51 (Sonnet~4.6); over the commission operators it ranges from 0.69 to 0.72. Sonnet's much stronger parametric knowledge (closed-book accuracy 0.58 versus 0.21 for Haiku) does not translate into robustness against graph errors under grounded instructions.
 
-\subsection{RQ3: Where the damage arises}
+\subsection{RQ2: Where the damage arises}
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/fig3_mechanism.pdf}
@@ -241,20 +237,20 @@ The generators are close to interchangeable (Figure~\ref{fig:attr}b). Averaged o
 \label{fig:mech}
 \end{figure}
 
-The mediation decomposition separates two mechanisms (Figure~\ref{fig:mech}a). For the omission operators, almost all of the loss arises in retrieval. The retrieval share is 0.95 (95\% CI 0.84--1.04) for edge deletion, 0.90 (0.81--0.98) for entity deletion and 0.89 (0.78--0.99) for split, which supports H3 for split errors. Once the gold evidence is missing, generators rarely recover, and they abstain rather than guess.
+The mediation decomposition separates two mechanisms (Figure~\ref{fig:mech}a). For the omission operators, almost all of the loss arises in retrieval. The retrieval share is 0.95 (95\% CI 0.84--1.04) for edge deletion, 0.90 (0.81--0.98) for entity deletion and 0.89 (0.78--0.99) for split, which supports H2 for omission errors. Once the gold evidence is missing, generators rarely recover, and they abstain rather than guess.
 
-For relation corruption and merge, the retrieval shares are 0.59 (0.51--0.67) and 0.60 (0.48--0.74). The generation share is therefore about 0.40, below the pre-registered 50\% threshold, so H3 is not supported for these operators. Both commission errors also act through retrieval: corruption redirects traversals, and merges relabel nodes so that question entities no longer link. Even so, they are the only errors with a substantial generation-stage component. The shares are almost identical across the five generators (0.56--0.61 for merge and 0.58--0.60 for corruption) and similar for PPR. The mechanism is thus a property of the error, not of the model.
+For relation corruption and merge, the retrieval shares are 0.59 (0.51--0.67) and 0.60 (0.48--0.74). The generation share is therefore about 0.40, below 50\%, so the generation part of H2 is not supported for these operators. Both commission errors also act through retrieval: corruption redirects traversals, and merges relabel nodes so that question entities no longer link. Even so, they are the only errors with a substantial generation-stage component. The shares are almost identical across the five generators (0.56--0.61 for merge and 0.58--0.60 for corruption) and similar for PPR. The mechanism is thus a property of the error, not of the model.
 
-\subsection{RQ4: Outcomes and mitigation}
-\paragraph{Confident errors (H4).} The outcome distribution differs sharply by error class ($\chi^2=1974$, df$=3$, $p<10^{-15}$; Figure~\ref{fig:mech}b). Pooled over both retrievers, among incorrect answers under omission errors, 97.2\% are abstentions, 2.8\% are other wrong answers and none adopts a false value. Under commission errors, 78.5\% are abstentions, 10.6\% adopt an injected false value and 10.9\% are other wrong answers. Under relation corruption at $p=0.3$, 8.8\% of all answers repeat the injected false object. Omission errors make a GraphRAG system less helpful; commission errors make it wrong with confidence. H4 is supported.
+\subsection{RQ3: Mitigation}
+\paragraph{Confident errors (H2, continued).} The outcome distribution differs sharply by error class ($\chi^2=1974$, df$=3$, $p<10^{-15}$; Figure~\ref{fig:mech}b). Pooled over both retrievers, among incorrect answers under omission errors, 97.2\% are abstentions, 2.8\% are other wrong answers and none adopts a false value. Under commission errors, 78.5\% are abstentions, 10.6\% adopt an injected false value and 10.9\% are other wrong answers. Under relation corruption at $p=0.3$, 8.8\% of all answers repeat the injected false object. Omission errors make a GraphRAG system less helpful; commission errors make it wrong with confidence. The outcome part of H2 is supported.
 
-\paragraph{Provenance (H5).} Attaching source sentences reduces false-value adoption (OR 0.41, $p<10^{-27}$). For Haiku under corruption at $p=0.3$, adoption falls from 8.8\% to 3.5\%, because the kept sentence contradicts the corrupted triple. Contrary to the second part of H5, provenance helps most under \emph{omission}: under edge deletion at $p=0.3$, it raises accuracy by 16.5 points (0.398 to 0.563), and it recovers 8.5 points under split.
+\paragraph{Provenance (H3).} Attaching source sentences reduces false-value adoption (OR 0.41, $p<10^{-27}$). For Haiku under corruption at $p=0.3$, adoption falls from 8.8\% to 3.5\%, because the kept sentence contradicts the corrupted triple. Contrary to the first part of H3, provenance helps most under \emph{omission}: under edge deletion at $p=0.3$, it raises accuracy by 16.5 points (0.398 to 0.563), and it recovers 8.5 points under split.
 
 The mechanism is redundancy. A sentence attached to a surviving triple often also states the deleted fact; for example, a film's release-year sentence frequently names its director. The mediation analysis shows this as a negative generation component under provenance: the generator recovers facts that retrieval lost. The rate $\times$ provenance interaction is positive ($\beta=0.85$, $p<10^{-11}$). The three-way interaction with the commission indicator is negative ($\beta=-0.43$, $p=0.002$), so the benefit of provenance is smaller against commission errors. Its size also depends on the generator. Under corruption at $p=0.3$, provenance adds 6--7 points for the Claude models but only 1--3 points for gpt-oss-120b, Gemma~4 and gpt-oss-20b, which give the contradicting sentence less weight.
 
-\paragraph{Generator strength (H6).} H6 is not supported. The generator $\times$ error-class interactions are not significant (all $p>0.07$), the mediation shares do not differ between generators, and generator choice explains less than 1\% of the variance. Within the tested range of capabilities, the stronger generator neither reduces generation-stage loss nor narrows the gap.
+\paragraph{Generator strength (H3).} The second part of H3 is not supported. The generator $\times$ error-class interactions are not significant (all $p>0.07$), the mediation shares do not differ between generators, and generator choice explains less than 1\% of the variance. Within the tested range of capabilities, the stronger generator neither reduces generation-stage loss nor narrows the gap.
 
-\subsection{RQ5: Natural extraction errors}\label{sec:natural}
+\subsection{Exploratory analysis: natural extraction errors}\label{sec:natural}
 \begin{table}[t]
 \caption{Natural error profiles of three LLM extractors on the supporting paragraphs (1,464 paragraphs). Coverage is the share of gold facts recovered as a triple linking the same head and tail. Tail conflict is the share of gold (head, relation) pairs extracted with a different object. The split rate is the share of gold entities with at least one surface variant among the extracted nodes. The unsupported share comes from a verifier check of 200 sampled triples per extractor.}
 \label{tab:natural}
@@ -279,7 +275,7 @@ Real extractors operate in the omission-dominated regime (Table~\ref{tab:natural
 \label{fig:natural}
 \end{figure}
 
-H7 is not supported in its strict form (Figure~\ref{fig:natural}). Over graphs built only by an extractor, Haiku reaches 0.492 accuracy on the gpt-oss-120b graph and 0.658 on the Haiku graph with triples only, and 0.552 and 0.673 with provenance. These values sit far below the clean gold-anchored graph (0.892), but above the additive model's predictions of 0.280 and 0.456 with triples only.
+The exploratory prediction does not hold in its strict form (Figure~\ref{fig:natural}). Over graphs built only by an extractor, Haiku reaches 0.492 accuracy on the gpt-oss-120b graph and 0.658 on the Haiku graph with triples only, and 0.552 and 0.673 with provenance. These values sit far below the clean gold-anchored graph (0.892), but above the additive model's predictions of 0.280 and 0.456 with triples only.
 
 Two properties of natural errors explain the gap, and a coverage-based prediction narrows it. First, natural omissions cluster within questions: the share of questions with all gold facts covered (0.40 and 0.58) exceeds what independent errors at the same per-fact coverage would give (0.36 and 0.49). Second, partially covered questions can sometimes still be answered. A mediation model that uses the measured per-question coverage predicts 0.411 and 0.563, within 0.04--0.10 of the observed values. With only two extractors and one generator, this comparison is indicative. The uniform-injection curves should be read as a conservative lower bound on the accuracy of real pipelines, not as a calibrated predictor.
 
@@ -288,17 +284,14 @@ Two properties of natural errors explain the gap, and a coverage-based predictio
 \begin{table}[t]
 \caption{Summary of the hypothesis tests.}\label{tab:hyp}
 \small
-\begin{tabular}{p{0.6cm}p{6.6cm}p{5.6cm}}
+\begin{tabular}{p{0.9cm}p{5.6cm}p{6.3cm}}
 \toprule
-H & Prediction & Outcome \\
+& Prediction & Outcome \\
 \midrule
-H1 & Monotone decline for all operators; omissions steepest on retrieval & Partially supported: 5/6 operators decline (spurious: none); corruption is as steep as deletion on retrieval \\
-H2 & Graph errors explain the most variance & Supported: Shapley share 0.83--0.97 vs.\ $\le$0.08 \\
-H3 & Split $>$50\% retrieval-mediated; corruption and merge $>$50\% generation-mediated & Supported for split (0.89); not supported for corruption and merge (generation share $\approx$0.40) \\
-H4 & Commission errors cause more adoption and fewer abstentions & Supported: 10.6\% vs.\ 0\% adoption among wrong answers \\
-H5 & Provenance reduces adoption, not omission damage & First part supported (OR 0.41); second part refuted: largest gains under omission (+16.5 pts) \\
-H6 & Stronger generators reduce generation loss & Not supported: no interaction; generator share $<$1\% \\
-H7 & Injected curves predict natural accuracy & Not supported strictly: curves are a conservative lower bound; a coverage-based model comes within 0.04--0.10 \\
+H1 & All error types reduce accuracy monotonically; graph errors explain the most variance & \textbf{Largely supported.} Five of six types reduce accuracy (spurious edges: no effect under \khop); Shapley share 0.83--0.97 vs.\ $\le$0.08 for every other factor \\
+H2 & Omissions act through retrieval and cause abstention; commission errors act through generation and cause false-value adoption & \textbf{Partially supported.} Omissions: 89--95\% retrieval-mediated, 97\% of wrong answers are abstentions. Commission: only $\approx$40\% generation-mediated, but the only source of adoption (10.6\% of wrong answers) \\
+H3 & Provenance reduces adoption but not omission loss; stronger generators reduce generation loss & \textbf{Mixed.} Provenance reduces adoption (OR 0.41) and, unexpectedly, helps most under omission (+16.5 pts); generators: no effect (share $<$1\%) \\
+Expl. & Injected curves predict accuracy on natural graphs & \textbf{Not in strict form.} Curves are a conservative lower bound; a coverage-based model comes within 0.04--0.10 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -314,10 +307,11 @@ H7 & Injected curves predict natural accuracy & Not supported strictly: curves a
 
 \paragraph{Implications for evaluation methodology.} Uniform, independent error injection overstates the damage that natural errors of the same marginal rate cause, because natural omissions cluster. Robustness studies should therefore report per-question coverage, as in our mediation model, and not only marginal error rates. This complements calls for typed degradation profiles~\cite{wang2026missdiag}.
 
-\section{Threats to Validity}\label{sec:threats}
+\section{Limitations and Threats to Validity}\label{sec:threats}
+We organize the limitations by the four validity types common in controlled experiments~\cite{wohlin2012experimentation}.
 \paragraph{Construct validity.} Operators are applied uniformly and one at a time, whereas natural errors cluster and co-occur (Section~\ref{sec:natural}). We treat the curves as controlled, typed sensitivities, not as predictions for any particular pipeline. The single-answer judge was validated against a second LLM judge, with disagreements adjudicated by a third model. A human validation by the authors is still pending and will be added before publication. Exact match, reported in the released tables, ranks the 192 conditions almost identically to judged accuracy (Spearman $\rho=0.99$). It is on average 0.04 lower, because it misses paraphrased answers.
 
-\paragraph{Internal validity.} Anchoring removes redundant background copies of gold facts. This isolates the counterfactual but makes the graph more fragile than natural graphs, a difference we quantify in RQ5. Generation used a single injection seed. In the deterministic retrieval grid over three seeds, the standard deviation of gold-evidence retrieval across seeds has a median of 0.011 and a maximum of 0.043, both smaller than the between-condition differences we interpret. Analyses use population-averaged GEE models instead of the pre-registered random-intercept GLMM (a logged deviation). A within-question conditional logit model, which, like the GLMM, conditions on question-specific intercepts, reproduces the ranking of the five harmful operators (odds ratios per $+0.1$ of 0.37, 0.54, 0.56, 0.71 and 0.75 for entity deletion, edge deletion, corruption, merge and split). It estimates a small positive effect of spurious edges (OR 1.05), consistent with the extra source sentences they bring under provenance. The operator ranking is also conditional on anchoring: because each gold fact exists exactly once, deletions are maximally damaging, and natural graphs with redundant facts would lose less (Section~\ref{sec:natural}).
+\paragraph{Internal validity.} Anchoring removes redundant background copies of gold facts. This isolates the counterfactual but makes the graph more fragile than natural graphs, a difference we quantify in Section~\ref{sec:natural}. Generation used a single injection seed. In the deterministic retrieval grid over three seeds, the standard deviation of gold-evidence retrieval across seeds has a median of 0.011 and a maximum of 0.043, both smaller than the between-condition differences we interpret. Analyses use population-averaged GEE models instead of the random-intercept GLMM specified in the protocol (a logged deviation). A within-question conditional logit model, which, like the GLMM, conditions on question-specific intercepts, reproduces the ranking of the five harmful operators (odds ratios per $+0.1$ of 0.37, 0.54, 0.56, 0.71 and 0.75 for entity deletion, edge deletion, corruption, merge and split). It estimates a small positive effect of spurious edges (OR 1.05), consistent with the extra source sentences they bring under provenance. The operator ranking is also conditional on anchoring: because each gold fact exists exactly once, deletions are maximally damaging, and natural graphs with redundant facts would lose less (Section~\ref{sec:natural}).
 
 \paragraph{External validity.} We use one English, Wikipedia-derived multi-hop dataset with short factoid answers. The released subsample contains questions whose answers some models know parametrically: closed-book accuracy reaches 0.58 for Sonnet~4.6. Grounded instructions suppressed this knowledge to the point that generators behaved alike, but other prompting regimes may differ. Global sense-making queries~\cite{edge2024local}, community-summary pipelines and domain corpora, such as engineering or logistics documentation with temporal and procedural knowledge, remain to be tested. The dense passage reference uses TF-IDF; stronger dense retrievers would narrow its gap to the clean graph but do not affect the within-graph comparisons, which are the subject of the study.
 
@@ -331,7 +325,7 @@ Through controlled injection of typed construction errors into a gold-anchored k
 \end{acks}
 
 \section*{Data and Code Availability}
-The pipeline (graph construction, operators, retrievers, prompts, judge and analysis), the pre-registration with its deviations log, and all generated answers, judgments and model-call caches will be released upon publication.
+The pipeline (graph construction, operators, retrievers, prompts, judge and analysis), the study protocol with its deviations log, and all generated answers, judgments and model-call caches are available at \url{https://github.com/ANONYMIZED/graphrag-error-injection}.
 
 \section*{Declaration of Generative AI Use}
 LLMs were the objects of study, serving as extractors, generators and judges. The experimental pipeline, the analysis and the drafting of this manuscript were carried out with substantial assistance from an AI research assistant under the authors' direction. The authors take full responsibility for the content. [Authors: adapt to the journal's policy.]
