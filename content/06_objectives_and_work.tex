@@ -1,0 +1,161 @@
+\section{Objectives and work programme}
+
+\subsection{Anticipated total duration of the project}
+
+The project will be conducted over 36 months. Funding is requested for the entire duration.
+
+\subsection{Objectives}
+
+The overall objective is to make the quality of \acp{KG} that \acp{LLM} build from engineering planning documents measurable, to attribute its effect on planning tasks to specific construction stages, and to improve it in a targeted way during construction. The central research question is:
+
+\begin{quote}
+\itshape Which construction-stage errors in planning knowledge graphs harm planning outcomes, how can they be detected without a gold standard, and how can they be repaired during construction?
+\end{quote}
+
+The project pursues four objectives:
+\begin{description}[leftmargin=1.1cm, style=sameline, itemsep=1pt]
+  \item[O1] A gold-anchored testbed of engineering planning documents, gold graphs, competency questions and downstream planning tasks (\wpref{1}).
+  \item[O2] A typed taxonomy and controlled injection of construction-stage errors at the schema, extraction and reconciliation stages, including engineering-specific errors such as unit, table and variant errors (\wpref{2}, \wpref{3}).
+  \item[O3] Gold-free quality estimators that predict downstream task quality from properties of the graph and its sources (\wpref{4}).
+  \item[O4] Repair and provenance methods that close the gap between an extracted graph and an oracle graph, validated on planning tasks with planners (\wpref{4}, \wpref{5}).
+\end{description}
+
+\paragraph{Working hypotheses.}
+The hypotheses are formulated to be tested on the \wpref{1} testbed. Thresholds and the analysis plan for each confirmatory test will be fixed in a study protocol that is registered publicly before the confirmatory runs (\wpref{0}).
+\begin{description}[leftmargin=1.1cm, style=sameline, itemsep=2pt]
+  \item[H1] \emph{Schema.} Schemas derived from planning \acp{CQ} reduce the omission of task-relevant facts compared with schema-free extraction. Schema errors (missing types, merged relation types) propagate mainly through retrieval, like omission errors.
+  \item[H2] \emph{Reconciliation.} In planning documents, split errors (the same machine, station or process under different names, identifiers or granularities) are more frequent than merge errors. At equal \ac{ER} F1, soft, provenance-preserving merges lead to higher downstream accuracy than hard merges, and merge errors cause false-value adoption, like corrupted relations.
+  \item[H3] \emph{Quality estimation.} Gold-free signals (cross-extractor disagreement, entailment between triples and source sentences, \ac{CQ} answerability and ontology-constraint violations) predict downstream task quality on held-out cases.
+  \item[H4] \emph{Repair.} Quality-guided repair closes a larger share of the gap to an oracle graph than replacing the retriever or the generator with a stronger one.
+\end{description}
+H4 builds on the preliminary finding that graph errors explain 83--97\,\% of accuracy variance, the retriever 8\,\% and the generator less than 1\,\% \parencite{reider2026graph}; H1 and H2 test whether the mechanisms found on general-domain data hold for schema and reconciliation errors in engineering documents.
+
+\paragraph{Relevance beyond science.}
+Planning in small and medium-sized manufacturing companies and in logistics relies on documents and individual expertise. Assistance systems that make the quality of their knowledge base visible lower the barrier to simulation-based planning and show where human expertise must be involved. The results bear on the design of trustworthy AI assistance systems and on standard-conformant planning knowledge (VDI~5200, \ac{AAS}). Open-weight models that run on in-house infrastructure keep confidential planning data under the control of the companies.
+
+\subsection{Work programme including proposed research methods}
+
+\paragraph{Overview.}
+The work programme comprises seven \acp{WP} (\autoref{fig:work-packages}). \wpref{1} builds the testbed used by all later \acp{WP}. \wpref{2} and \wpref{3} study the schema and reconciliation stages with controlled error injection, extending the methodology of \parencite{reider2026graph}. \wpref{4} develops quality estimation and repair, and \wpref{5} validates the results on downstream planning tasks and with planners. Retrieval methods enter only as an evaluation layer: every experiment is run with five retrieval families (k-hop expansion, \ac{PPR}, community summaries, dual-level retrieval and an agentic explorer) so that conclusions do not depend on one retriever. Magdeburg (MD) leads \wpref{3} and \wpref{4}; Dresden (DD) leads \wpref{2} and \wpref{5}; \wpref{0}, \wpref{1} and \wpref{6} are joint.
+
+\begin{figure}[t]
+    \centering
+    \begin{ganttchart}[vgrid={*3{draw=none},*1{draw=black!10, line width=1pt}}]{1}{12}
+      \gantttitle{Year 1}{4}
+      \gantttitle{Year 2}{4}
+      \gantttitle{Year 3}{4} \\
+      \ganttgroup[group/.append style={fill=black!40}]{WP0 Coordination, data, protocol (MD, DD)}{1}{12} \\
+      \ganttgroup{WP1 Testbed and gold anchoring (MD, DD)}{1}{3} \\
+      \ganttbar{documents, gold graphs, CQs}{1}{3} \\
+      \ganttmilestone{MS1 testbed v1}{3} \\
+      \ganttgroup[group/.append style={fill=yellow}]{WP2 Schema construction (DD)}{2}{6} \\
+      \ganttbar[bar/.append style={fill=yellow}]{schema variants, schema-error injection}{2}{6} \\
+      \ganttmilestone{MS2 schema study}{6} \\
+      \ganttgroup[group/.append style={fill=green}]{WP3 Entity reconciliation (MD)}{4}{8} \\
+      \ganttbar[bar/.append style={fill=green}]{split/merge study, soft vs.\ hard merging}{4}{8} \\
+      \ganttmilestone{MS3 benchmark paper}{8} \\
+      \ganttgroup{WP4 Quality estimation and repair (MD)}{6}{10} \\
+      \ganttbar{estimators, repair, provenance}{6}{10} \\
+      \ganttmilestone{MS4 estimator validated}{10} \\
+      \ganttgroup[group/.append style={fill=yellow}]{WP5 Downstream validation (DD)}{7}{12} \\
+      \ganttbar[bar/.append style={fill=yellow}]{planning tasks, planner study}{7}{12} \\
+      \ganttgroup[group/.append style={fill=black!40}]{WP6 Release and dissemination (MD, DD)}{3}{12} \\
+      \ganttbar[bar/.append style={fill=black!40}]{testbed v1}{3}{3}
+      \ganttbar[inline, bar/.append style={fill=black!40}]{}{8}{8}
+      \ganttbar[inline, bar/.append style={fill=black!40}]{}{11}{12} \\
+      \ganttmilestone{MS5 final release}{12}
+      \ganttvrule{}{4}
+      \ganttvrule{}{8}
+    \end{ganttchart}
+    \vspace{-1.2em}
+    \caption{Work schedule in quarters. MD: Magdeburg, DD: Dresden. Milestones MS1--MS5 fall at months 9, 18, 24, 30 and 36.}
+    \label{fig:work-packages}
+\end{figure}
+
+\begin{table}[t]
+\centering\footnotesize
+\begin{tblr}{colspec={Q[l,3.6cm]Q[c,1.0cm]Q[c,2.2cm]Q[c,2.2cm]}, row{1}={font=\bfseries}}
+Work package & Months & Magdeburg (staff months) & Dresden (staff months)\\
+\toprule
+WP0 Coordination, data, protocol & 1--36 & 2 & 2\\
+WP1 Testbed and gold anchoring & 1--9 & 5 & 5\\
+WP2 Schema construction & 6--18 & -- & 12\\
+WP3 Entity reconciliation & 10--22 & 12 & --\\
+WP4 Quality estimation and repair & 16--30 & 12 & 3\\
+WP5 Downstream validation & 20--34 & 3 & 12\\
+WP6 Release and dissemination & 7--36 & 2 & 2\\
+\midrule
+Total & & 36 & 36\\
+\bottomrule
+\end{tblr}
+\caption{Allocation of the two requested doctoral positions (100\,\%, 36 months each) to the work packages.}
+\label{tab:staff}
+\end{table}
+
+\wpdef{0}{Lang, Schmidt; months 1--36}{Coordination, research data and study protocol}
+\textbf{Tasks.} T0.1 Joint project management with quarterly meetings and a shared repository. T0.2 Research data management plan (\autoref{sec:rdm}) and data-use agreements for the industrial cases. T0.3 Study protocol with hypotheses, analysis plan and thresholds for H1--H4, registered before the confirmatory runs. T0.4 Ethics and data-protection documentation for the planner study in \wpref{5}.
+\textbf{Deliverables.} Data management plan (month 3); registered protocol (month 12, updated before each confirmatory study).
+
+\wpdef{1}{MD and DD; months 1--9}{Engineering testbed and gold anchoring}
+\textbf{Objective.} Provide documents, gold graphs and tasks on which construction errors can be injected and measured.
+\textbf{Tasks.} T1.1 (MD) Prepare the planning cases from ASMG4SimPy: multi-modal planning documents and expert reference simulation models with element-level derivability labels. Derive a gold graph for the document-derivable part and record the expert-decision part separately, so that omissions caused by extraction can be distinguished from knowledge that is not in the documents. \todo{list cases and status of data permissions} T1.2 (DD) Add the curated \ac{OWL} maintenance ontology and \ac{QA} dataset of \parencite{ludwig2025ontology} and job-shop scenarios from \parencite{ludwig2024speech} as gold graphs from a second domain, and an openly licensed intralogistics case based on \parencite{betker2026craneflow}. T1.3 (both) Write \acp{CQ} per case along the planning phases of VDI~5200 \parencite{vdi5200} and derive planning \ac{QA} items with gold evidence paths; double annotation of a subset with reported agreement. T1.4 Build realistic extracted graphs with at least three \ac{LLM} extractors (open-weight and commercial) and embed the gold evidence, following \parencite{reider2026graph}.
+\textbf{Methods.} Gold anchoring, double annotation, Cohen's/Fleiss' $\kappa$.
+\textbf{Deliverables.} D1 Testbed v1 with documentation (MS1, month 9).
+\textbf{Risk and fallback.} If permissions for industrial documents are delayed, the testbed starts with the openly licensed and curated cases (T1.2) and adds industrial cases later; the release in \wpref{6} then contains derived, anonymised graphs only.
+
+\wpdef{2}{DD (Schmidt, Ludwig); months 6--18}{Competency-question-driven schema construction}
+\textbf{Objective.} Test H1 and develop schema construction for planning knowledge.
+\textbf{Tasks.} T2.1 Compare three schema regimes: schema-free extraction with canonicalisation \parencite{zhang2024edc,mo2025kggen}, \ac{CQ}-driven schema induction with \acp{LLM}, extending the ontology-driven approach of \parencite{ludwig2024speech}, and schemas anchored in existing models (\ac{AAS} submodels, the Dresden ontologies \parencite{ludwig2025ontology,kosse2024semantic}, the simulation metamodel of \parencite{rehm2010metamodell}). T2.2 Define and inject schema errors at controlled rates: missing entity and relation types, merged relation types, wrong domain or range, missing constraints (capacities, precedence, units). T2.3 Measure omission of task-relevant facts and downstream accuracy; decompose losses into retrieval- and generation-mediated parts with the mediation analysis of \parencite{reider2026graph}.
+\textbf{Methods.} \ac{LLM}-based ontology learning, \ac{OWL}/SHACL constraints, controlled injection, mediation analysis, mixed-effects models.
+\textbf{Deliverables.} D2 Schema study and schema-construction component (MS2, month 18).
+
+\wpdef{3}{MD (Lang, Reider); months 10--22}{Entity reconciliation for planning entities}
+\textbf{Objective.} Test H2 and develop reconciliation suited to planning entities.
+\textbf{Tasks.} T3.1 Annotate gold entity clusters in the testbed and define identity criteria for planning entities (machine versus machine type, station versus line, variant versus product family, part-whole relations). T3.2 Run split and merge injection on the engineering graphs at rates of 10--50\,\% and compare with the general-domain results of \parencite{reider2026graph}. T3.3 Compare reconciliation methods: exact and fuzzy string matching, embedding similarity, \ac{LLM}-based matching and clustering \parencite{peeters2023entity,wang2024match,fu2025incontext}; each as hard merging and as soft merging with reversible, confidence-weighted identity edges that keep provenance. T3.4 Measure order effects when documents are added incrementally, as in planning projects that grow over time.
+\textbf{Methods.} Controlled injection, pairwise and cluster-level \ac{ER} metrics, downstream accuracy and false-value adoption, mixed-effects models.
+\textbf{Deliverables.} D3 Reconciliation benchmark for \ac{LLM}-built engineering graphs and study (MS3, month 24).
+
+\wpdef{4}{MD (Lang, Reider) with DD; months 16--30}{Gold-free quality estimation and repair}
+\textbf{Objective.} Test H3 and H4.
+\textbf{Tasks.} T4.1 Compute gold-free signals per graph region: disagreement between extractors, entailment between each triple and its source sentence, answerability of the \acp{CQ}, violations of ontology constraints (with DD) and self-consistency of repeated extraction. T4.2 Validate the signals as predictors of downstream accuracy on held-out cases (rank correlation and calibration; thresholds fixed in the protocol). T4.3 Repair low-quality regions by targeted re-extraction, constraint-guided completion and provenance attachment. T4.4 Compare the gain from repair with the gain from a stronger retriever or generator and with an oracle graph (H4).
+\textbf{Methods.} Natural-language inference with \acp{LLM}, \ac{OWL}/SHACL reasoning, predictive validation, ablations.
+\textbf{Deliverables.} D4 Open-source quality-estimation and repair module for common graph databases (MS4, month 30).
+
+\wpdef{5}{DD (Schmidt, Ludwig) with MD; months 20--34}{Downstream validation with planning tasks and planners}
+\textbf{Objective.} Validate the results on the tasks that matter for planning.
+\textbf{Tasks.} T5.1 Run the construction variants from \wpref{2}--\wpref{4} through the five retrieval families on the planning \ac{QA} items. T5.2 (MD) Generate simulation models from the repaired and unrepaired graphs and compare them with the expert reference models (element-level agreement and deviation of simulated \acp{KPI} such as throughput and lead time) \parencite{kute2025generative}. T5.3 (DD) Planner study: practitioners use a dialogue assistant based on \parencite{ludwig2025ontology} with graphs of different quality and rate correctness and usefulness of the answers in a within-subject design. T5.4 Human validation of the automatic \ac{LLM} judges on a stratified sample, with reported agreement.
+\textbf{Methods.} Controlled experiments, user study with informed consent, inter-rater agreement.
+\textbf{Deliverables.} D5 Validation study (journal paper) and assistant prototype.
+
+\wpdef{6}{MD and DD; months 7--36}{Release and dissemination}
+\textbf{Tasks.} T6.1 Release testbed v1 (month 9), the reconciliation benchmark (month 24) and the final testbed, code and injection framework (month 36) with DOIs. T6.2 Publications in journals of production research and of knowledge engineering, and at venues such as the Winter Simulation Conference. T6.3 Workshop with industrial planners in year 3.
+\textbf{Deliverables.} D6 Public benchmark, code and documentation (MS5, month 36).
+
+\paragraph{Validity concepts.}
+(i) Each hypothesis is tested in a confirmatory study with a registered protocol; exploratory analyses are reported as such. (ii) Cases are split into development and held-out cases before method development; H3 and H4 are evaluated on held-out cases only. (iii) Each experiment uses at least three \ac{LLM} families, including open-weight models with fixed versions, and caches all model outputs. (iv) Automatic \ac{LLM} judges are validated against human ratings (T5.4). (v) Results are reported per retrieval family, so that conclusions do not rest on one retriever.
+
+\paragraph{Risks.} The main risks and the planned mitigations are:
+
+\noindent\begin{tblr}{colspec={Q[l,5.6cm]X[l]}, row{1}={font=\bfseries}, rows={font=\small}}
+Risk & Mitigation\\
+\toprule
+Delayed data permissions for industrial cases & Start with curated and openly licensed cases (T1.2); release derived, anonymised graphs only\\
+\midrule
+Changes or withdrawal of commercial \ac{LLM} APIs & Open-weight models on in-house hardware; fixed model versions; cached outputs\\
+\midrule
+Gold-free signals do not predict downstream quality (H3 rejected) & The negative result is reported; repair is then guided by \ac{CQ} answerability, which is gold-free by construction\\
+\midrule
+Limited availability of planners for \wpref{5} & Within-subject design with small samples; recruitment through industrial contacts of both groups\\
+\midrule
+Fast-moving method landscape & The injection framework is method-agnostic, so new construction or retrieval methods can be added without changing the design\\
+\bottomrule
+\end{tblr}
+
+\subsection{Handling of research data}\label{sec:rdm}
+
+\paragraph{Data types and volume.} The project produces planning documents (input, partly confidential), gold graphs, \acp{CQ} and \ac{QA} items, injected and extracted graphs, model outputs, judge and expert ratings, and code. We expect a volume in the order of tens of gigabytes, dominated by cached model outputs.
+\paragraph{Formats and documentation.} Graphs in RDF/Turtle and GraphML, annotations and outputs in JSON Lines and CSV, code in Python. Each release is documented with a datasheet, a codebook and the generating configuration, so that every reported number can be reproduced from the released files.
+\paragraph{Quality assurance.} Double annotation of gold graphs and \ac{QA} items with reported agreement; automated consistency checks of the injection framework; versioned releases.
+\paragraph{Storage and legal aspects.} Working data are stored on the university servers of both sites with access control. Confidential industrial documents remain at the site that holds the data-use agreement and are not released; only derived, anonymised graphs and items are released if the agreements permit. Public datasets keep their licences (2WikiMultihopQA: Apache-2.0). Ratings from the planner study are stored pseudonymised in accordance with the GDPR.
+\paragraph{Reuse and long-term access.} Releases receive DOIs on Zenodo (open data under CC BY 4.0, code under an OSI-approved licence) and are kept for at least ten years in line with the DFG Code of Conduct. Alignment with NFDI4Ing practices will be sought. \todo{check local research data policies of both universities}
+\paragraph{Responsibilities.} Each applicant is responsible for the data of their site; the two doctoral researchers act as data curators.

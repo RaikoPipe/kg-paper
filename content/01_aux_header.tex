@@ -1,0 +1,17 @@
+% use this to add any packages that are needed specifically for this proposal
+\usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,decorations.pathreplacing}
+% DFG form 54.01 asks for Arial 11 pt or comparable: Helvetica clone with Arial metrics
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage{helvet}
+\else
+  \usepackage{fontspec}
+  \setsansfont{texgyreheros}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold, ItalicFont=*-italic, BoldItalicFont=*-bolditalic]
+  \setmainfont{texgyreheros}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold, ItalicFont=*-italic, BoldItalicFont=*-bolditalic]
+\fi
+\usepackage{booktabs}
+% placeholders that must be resolved before submission
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
